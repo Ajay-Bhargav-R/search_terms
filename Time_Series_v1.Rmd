@@ -1,0 +1,93 @@
+---
+title: "SNL_SearchTerm_Time_Series"
+author: "Ajay Bhargav R"
+date: "21/11/2021"
+output: html_document
+---
+This is a basic analysis on the time series of *google trends* for the search 
+term 'Saturday Night Live'
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+
+```{r message=FALSE}
+#Installing and importing all the necessary libraries
+
+pkgs <- c('dplyr', 'tsibble', 'tidyverse', 'plotly','lubridate', 'feasts')
+new <- pkgs[!(pkgs %in% installed.packages()[,"Package"])]
+if(length(new)) install.packages(new)
+
+library(dplyr)
+library(tsibble)
+library(tidyverse)
+library(plotly)
+library(lubridate)
+library(feasts)
+```
+
+
+```{r}
+#Attaching the datasets
+data <- read_csv('SNL.csv')
+colnames(data) = c('week', 'searches')
+data <- data_frame(data)
+head(data)
+```
+This data has 2 columns with time(recorded weekly) and searches corresponding 
+to that week.
+```{r}
+#Converting the week from char to date format
+data$week <- as.Date(data$week, "%d-%m-%Y")
+data$key = 'K1'
+df <- as_tsibble(data, index=week, key=key)
+```
+
+```{r}
+#Finding Missing Values
+sapply(df, function(x) sum(is.na(x)))
+```
+This data has no missing values.
+
+
+```{r}
+date_range = as.Date(c('22-11-2016','16-11-2021'), "%d-%m-%Y")
+fig <- plot_ly(df,x=~week, y=~searches, type='scatter', mode='lines+markers')%>%
+        layout(title = '<b>Searches for *Saturday Night Live*</b>',
+               xaxis = list(title = 'Weeks', range=date_range), yaxis = list(title = 'Searches'),
+               annotations = list(text="This data consists weekly records from 27-Nov-2016 to 14-Nov-2021", showarrow=FALSE, x=date_range[2], y=-2, xanchor="right"))
+fig
+```
+We can see a clear pattern, an elevated number of search during certain parts of the year and relatively lower number of searches on te other part. This can be attributed to the show airing in a specfic perod of time. 
+
+```{r}
+monthly_view <- df %>%
+  group_by_key() %>%
+  index_by(Year_Month = ~ yearmonth(.)) %>% # monthly aggregates
+  summarise(
+    Number_of_Weeks = n(),
+    Average = mean(searches, na.rm = TRUE),
+    Total = sum(searches, na.rm = TRUE),
+    Mininmum = min(searches, na.rm = TRUE),
+    Maximum = max(searches, na.rm = TRUE)
+  )
+monthly_view[,c(2:7)]
+```
+
+```{r echo=FALSE}
+auto <- df %>%
+  ACF(searches)
+
+fig2 <- plot_ly(auto, x=~lag, y=~acf, type='scatter', mode='markers')%>%
+  layout(title='Autocorrelation Plot', xaxis=list(title='7D Lag'), showlegend=FALSE)%>%
+  add_segments(y=0.122, yend=0.122, x=0, xend=25, line=list(dash="dash", color="red"))%>%
+  add_segments(y=-0.122, yend=-0.122, x=0, xend=25, line=list(dash="dash", color="red"))%>%
+  add_segments(y=~acf, yend=0, x=~lag, xend=~lag, line=list(color="black"))
+fig2
+```
+
+```{r echo=FALSE}
+df %>%
+  ACF(searches)%>%
+  autoplot()
+```
